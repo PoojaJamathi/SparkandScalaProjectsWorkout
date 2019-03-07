@@ -1,0 +1,16 @@
+1.) Remove All Null from Type2 Columnns and write "Empty" String To Type2 Columnns
+
+2.) if i will pass the name i should get the total if it is greater than 200 or i should give 0 with new Column "Result_Given"
+
+3.) If i should pass the ID i should get "Attack"and "Defence " Column Average as new Column "Average_Diff_Attack"
+
+4.) If the Average of "Hp","Defence" and Special Attack is less than 50 Then Give TRUE else Give False with new Column "Result_Average" 
+
+5.) Perisit the dataframe inside the cache .
+
+5.) finally register this dataframe as An new Temp Table Called as "Test"
+
+6.) On this Test Table Perfoerm the Following Analytics
+    
+	a.) Get the sum of "Average_Diff_Attack".
+	b.) Get the number Count Of  name with Group By Type2 Column

@@ -1,0 +1,134 @@
+import org.apache.log4j.{Level, Logger}
+import org.apache.spark.SparkContext
+import org.apache.spark.sql.cassandra._
+import org.apache.spark.sql.{DataFrame, Row, SQLContext, SparkSession}
+import org.apache.spark.sql.functions._
+import org.joda.time.DateTime
+import org.apache.spark.sql.types.IntegerType
+import java.sql.Date
+import java.sql.Timestamp
+import java.time.LocalDate
+import java.text.SimpleDateFormat
+import java.util.Calendar
+import org.apache.spark.sql.expressions.UserDefinedFunction
+import scala.collection.mutable.HashMap
+object demo {
+  var sc: SparkContext = null
+  var sqlContext: SQLContext = null
+  var spark: SparkSession = null
+  def main(args:Array[String]): Unit = {
+    println("Hello")
+    spark = SparkSession.builder.appName("POS").config("spark.cassandra.connection.host", "5.9.58.93").master("local[3]").getOrCreate()
+    spark.conf.set("spark.executor.memory", "2g")
+    spark.conf.set("spark.driver.memory", "1g")
+    spark.conf.set("spark.cassandra.connection.host", "5.9.58.93")
+    val startDate: DateTime = DateTime.now()
+    sc = spark.sparkContext
+    sqlContext = new SQLContext(sc)
+    //reading csv file from location
+    var df = spark.read.format("com.databricks.spark.csv").option("header", "true").option("delimiter", ",").load("C:\\Users\\lol\\Desktop\\pokemon.csv")
+    df.printSchema()
+    df.show()                 // to show data
+
+    //Remove All Null from Type2 Columnns and write "Empty" String To Type2 Columnns
+    def CheckValiddata(): UserDefinedFunction = udf((value: String) => {
+      var result = ""
+      if (value == null || value.trim.isEmpty || value.trim.equalsIgnoreCase("null")) {
+        result = "EMPTY"
+      }
+      else {
+        result = value.toString
+      }
+      result
+    }
+    )
+
+    df = df.withColumn("Type 2", CheckValiddata()(df("Type 2")))
+    df.show()
+    
+    //if We will pass the Name We should get the total if it is greater than 200 we should return same value else 0 with new Column "Result_Given"
+    var GetTheTotalValueMAp: HashMap[String, String] = HashMap()
+    df.collect().foreach(                              // collecting key value pair from data
+      x => GetTheTotalValueMAp.put(x.getString(1), x.getString(4))
+    )
+
+    def GettheTotalofAname(GetTheTotalValueMAp: HashMap[String, String]): UserDefinedFunction = udf((value: String) => {        //passing hashmap in udf
+      var result: Int = 0
+      var getvaluefromname = GetTheTotalValueMAp.get(value).get.toString.toInt
+      if (getvaluefromname > 200) {
+        result = getvaluefromname
+      }
+      else {
+        result = 0
+      }
+      result
+    }
+    )
+
+    df = df.withColumn("result_given", GettheTotalofAname(GetTheTotalValueMAp: HashMap[String, String])(df("Name")))
+    df.show()
+
+    //If I should pass the ID I should get "Attack"and "Defence " Column Average as new Column "Average_Diff_Attack"
+    var GetTheValueMAp: HashMap[String, List[String]] = HashMap()
+    df.collect().foreach(
+      x => GetTheValueMAp.put(x.getString(0), List(x.getString(6), x.getString(7)))
+    )
+    def getTheAvg(GetTheValueMAp: HashMap[String, List[String]]): UserDefinedFunction = udf((value: String) => {
+      var mean: Double = 0.00
+      var list: List[String] = List[String]()
+      var Intlist: List[Int] = List[Int]()
+      list = GetTheValueMAp.get(value).get               // u will get list of string
+      Intlist = list.map(_.toInt)                           // making list of string to list of integer
+      mean = ((Intlist.sum.toDouble) / (Intlist.length.toDouble))
+      mean
+    }
+    )
+
+    df = df.withColumn("Average_Diff_Attack", getTheAvg(GetTheValueMAp: HashMap[String, List[String]])(df("#")))
+    df.show()
+
+    //If the Average of "Hp","Defence" and Special Attack is less than 50 Then Give TRUE else Give False with new Column "Result_Average" when we give Name
+    var GetTheValueMAp1: HashMap[String, List[String]] = HashMap()     // defining new empty hashmap
+    df.collect().foreach(
+      x => GetTheValueMAp1.put(x.getString(1), List(x.getString(5), x.getString(7), x.getString(8)))
+    )
+
+    def getTheAvg1(GetTheValueMAp1: HashMap[String, List[String]]): UserDefinedFunction = udf((value: String) => {
+      var result = ""
+      var mean: Double = 0.00
+      var list: List[String] = List[String]()
+      var Intlist: List[Int] = List[Int]()
+      list = GetTheValueMAp1.get(value).get
+      Intlist = list.map(_.toInt)
+      mean = ((Intlist.sum.toDouble) / (Intlist.length.toDouble))
+      if (mean > 50) {
+        result = "TRUE"
+      }
+      else {
+        result = "FALSE"
+      }
+      result
+    }
+    )
+
+    df = df.withColumn("Result_Average", getTheAvg1(GetTheValueMAp1: HashMap[String, List[String]])(df("Name")))
+    df.show()
+
+    //Perisit the dataframe inside the cache
+    df.cache()
+
+    //Renaming the column name
+    df = df.withColumnRenamed("Type 2", "Type2")
+
+    // finally register this dataframe as An new Temp Table Called as "Test"
+    df.createOrReplaceTempView("test")
+
+    // On this Test Table Perform the Following Analytics
+    //	a.) Get the sum of "Average_Diff_Attack".
+    //	b.) Get the number Count Of  name with Group By Type2 Column
+
+    val sqlDF = spark.sql("SELECT AVG(Average_Diff_Attack) FROM test")
+    sqlDF.show()
+    val sqlDF1 = spark.sql("SELECT COUNT(Name),Type2 FROM test GROUP BY Type2")
+    sqlDF1.show()
+  }}
